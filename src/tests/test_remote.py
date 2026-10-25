@@ -426,3 +426,16 @@ class TrackingOptionTests(TempData):
         self.assertContains(home, "Getting started")
         self.assertContains(home, "2 of 2 camera(s) placed")
 
+
+
+class DeviceTests(SimpleTestCase):
+    def test_auto_prefers_nvidia_then_intel_then_cpu(self):
+        from models.segmentation.yolo import detector as d
+        cases = [(["cuda:0", "cuda:1"], ["intel:gpu"], "cuda:0", "yolo26s-seg"),
+                 ([], ["intel:gpu.0", "intel:gpu.1"], "intel:gpu.0", "yolo26s-seg"),
+                 ([], [], "cpu", "yolo11n-seg")]
+        for cuda, intel, want, model in cases:
+            with mock.patch.object(d, "cuda_gpus", return_value=cuda), mock.patch.object(d, "intel_gpus", return_value=intel):
+                self.assertEqual(d.pick_device("auto"), want)
+                self.assertEqual(d.default_variant(d.pick_device("auto")), model)
+        self.assertEqual(d.pick_device("intel:gpu.1"), "intel:gpu.1")

@@ -66,9 +66,10 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Vision pipeline
-# Detector: empty picks the best that runs fast here (yolo26s-seg on an Intel GPU via OpenVINO, else yolo11n-seg).
+# Detector: empty picks the best that runs fast here (yolo26s-seg on a GPU, else yolo11n-seg).
 OVM_DETECTOR = os.environ.get("OVM_DETECTOR", "")
-OVM_DEVICE = os.environ.get("OVM_DEVICE", "auto")  # auto, intel:gpu, intel:cpu (OpenVINO), cpu, cuda:0 (PyTorch)
+# auto (first NVIDIA GPU, else first Intel GPU, else CPU), cuda:0, cuda:1 (PyTorch), intel:gpu, intel:gpu.1, intel:cpu (OpenVINO), cpu
+OVM_DEVICE = os.environ.get("OVM_DEVICE", "auto")
 OVM_IMGSZ = int(os.environ.get("OVM_IMGSZ", "960"))  # inference size: larger finds smaller, farther objects but is slower
 OVM_MAX_FPS = float(os.environ.get("OVM_MAX_FPS", "15"))
 OVM_FEED_IDLE_SECONDS = float(os.environ.get("OVM_FEED_IDLE_SECONDS", "30"))

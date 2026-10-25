@@ -80,9 +80,9 @@ def detector():
     with _lock:
         if _detector is None and _detector_error is None:
             try:
-                from models.segmentation.yolo.detector import pick_device
+                from models.segmentation.yolo.detector import default_variant, pick_device
                 device = pick_device(settings.OVM_DEVICE)
-                name = settings.OVM_DETECTOR or ("yolo26s-seg" if device == "intel:gpu" else "yolo11n-seg")
+                name = settings.OVM_DETECTOR or default_variant(device)
                 _detector = detectors.create(name, settings.MODELS_DIR, imgsz=settings.OVM_IMGSZ, device=device)
             except Exception as exc:  # report it on every feed rather than crash the server
                 _detector_error = "%s: %s" % (type(exc).__name__, exc)

@@ -3,7 +3,8 @@
 Weights: data/models/<name>/<name>.pt. If the file is missing it is fetched
 once by Ultralytics from its official release page and moved there.
 
-Speed: on a machine with an Intel GPU (OpenVINO installed), the model is
+Speed: on an NVIDIA GPU the model runs through PyTorch (CUDA build of torch).
+On a machine with an Intel GPU (OpenVINO installed), the model is
 exported once per frame shape to data/models/<name>/<name>_<h>x<w>_openvino_model
 and run on the GPU, several times faster than PyTorch on the CPU and with the
 same results. Anything that goes wrong there falls back to PyTorch on the CPU.
@@ -23,20 +24,42 @@ VARIANTS = ("yolo11n-seg", "yolo11s-seg", "yolo11m-seg", "yolo26n-seg", "yolo26s
 STRIDE = 32
 
 
-def intel_gpu():
-    """True when OpenVINO is installed and sees a GPU."""
+def intel_gpus():
+    """OpenVINO GPU devices as OVM device names: ['intel:gpu'] for one, ['intel:gpu.0', 'intel:gpu.1'] for two."""
     try:
         import openvino
-        return "GPU" in openvino.Core().available_devices
+        return ["intel:" + d.lower() for d in openvino.Core().available_devices if d.startswith("GPU")]
     except Exception:
-        return False
+        return []
+
+
+def intel_gpu():
+    """True when OpenVINO is installed and sees a GPU."""
+    return bool(intel_gpus())
+
+
+def cuda_gpus():
+    """NVIDIA GPUs PyTorch can use (needs a CUDA build of torch): ['cuda:0', ...]."""
+    try:
+        import torch
+        return ["cuda:%d" % i for i in range(torch.cuda.device_count())] if torch.cuda.is_available() else []
+    except Exception:
+        return []
 
 
 def pick_device(device="auto"):
-    """'intel:gpu' / 'intel:cpu' run through OpenVINO; 'cpu' / 'cuda:0' through PyTorch."""
+    """'intel:gpu' / 'intel:cpu' run through OpenVINO; 'cpu' / 'cuda:0' through PyTorch.
+
+    auto: the first NVIDIA GPU, else the first Intel GPU, else the CPU.
+    """
     if device == "auto":
-        return "intel:gpu" if intel_gpu() else "cpu"
+        return (cuda_gpus() + intel_gpus() + ["cpu"])[0]
     return device
+
+
+def default_variant(device):
+    """The model OVM uses unless OVM_DETECTOR says otherwise: the more accurate yolo26s-seg on a GPU."""
+    return "yolo11n-seg" if device in ("cpu", "intel:cpu") else "yolo26s-seg"
 
 
 class YoloSegDetector(Detector):

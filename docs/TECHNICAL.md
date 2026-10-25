@@ -104,11 +104,15 @@ JPEG-encoded only when a page asks for one.
     a second. The model is exported once per frame shape to
     `data/models/<name>/<name>_<h>x<w>_openvino_model` (about 30 s, the first
     time) and gives the same detections as PyTorch.
+  - **With an NVIDIA GPU** (CUDA build of PyTorch) it is `yolo26s-seg` on that
+    GPU; `OVM_DEVICE=auto` prefers NVIDIA, then Intel, then the CPU.
   - **Otherwise** it is `yolo11n-seg` with PyTorch on the CPU, about 200 ms per
     frame.
+  - `python manage.py prepare_models` downloads and exports models ahead of
+    time and prints the devices found and the speed.
   - `OVM_DETECTOR` picks another model (`yolo11s-seg`, `yolo26m-seg` ...),
-    `OVM_DEVICE` the hardware (`auto`, `intel:gpu`, `intel:cpu`, `cpu`,
-    `cuda:0`), `OVM_IMGSZ` the inference size, and `OVM_MAX_FPS` (15) caps
+    `OVM_DEVICE` the hardware (`auto`, `intel:gpu`, `intel:gpu.1`, `intel:cpu`, `cpu`,
+    `cuda:0`, `cuda:1`), `OVM_IMGSZ` the inference size, and `OVM_MAX_FPS` (15) caps
     the results per second.
 - **Confidence:** detections below 0.3 are dropped (0.25 for people, who are
   the priority and often score low when far away or partly hidden).

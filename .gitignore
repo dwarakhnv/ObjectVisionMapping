@@ -17,3 +17,4 @@ data/*
 !data/object_classes.json
 !data/sources/.gitkeep
 
+docs/INITAL_PROJECT*.md
