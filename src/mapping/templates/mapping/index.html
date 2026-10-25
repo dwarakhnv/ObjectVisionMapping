@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Mapping · Object Vision Mapping{% endblock %}
+{% block content %}
+<h1>Mapping</h1>
+<p class="lead">Calibrate each camera by matching reference points to pixels in its picture, then watch detected objects placed in the environment.</p>
+{% if environments %}
+<div class="grid cols-2">
+  {% for env in environments %}
+  <div class="card">
+    <h2 style="margin-bottom:6px">{{ env.name }}</h2>
+    <table class="list" style="margin-bottom:12px">
+      <thead><tr><th>Camera</th><th>Source</th><th>Calibration</th></tr></thead>
+      <tbody>
+      {% for cam in env.cameras %}
+        <tr>
+          <td><a href="/mapping/{{ env.slug }}/?camera={{ cam.id|urlencode }}">{{ cam.name }}</a></td>
+          <td class="muted">{% if cam.source.kind == "none" %}Not paired{% else %}{{ cam.source.kind }}{% endif %}</td>
+          <td>{% if cam.calibration.solved %}<span class="pill good">{{ cam.calibration.solved.rmse_px|floatformat:1 }} px</span>{% else %}<span class="pill">{{ cam.calibration.points|length }} point{{ cam.calibration.points|length|pluralize }}</span>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="3" class="muted">No cameras yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="row">
+      <a class="btn small" href="/legacy/environments/{{ env.slug }}/">Edit environment</a>
+      {% if env.cameras %}<a class="btn small" href="/mapping/{{ env.slug }}/">Calibrate</a>{% endif %}
+      <a class="btn small primary" href="/mapping/{{ env.slug }}/live/">Live map</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card muted">No environments yet. <a href="/legacy/environments/">Create one</a> first.</div>
+{% endif %}
+{% endblock %}

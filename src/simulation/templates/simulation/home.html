@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Cameras · Object Vision Mapping{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:14px">
+  <div>
+    <h1>Cameras</h1>
+    <p class="lead" style="margin:0">Pick a camera to watch it live.</p>
+  </div>
+</div>
+
+<div class="cam-layout">
+  <aside class="stack">
+    <div class="card" style="padding:12px">
+      <div class="row" style="margin-bottom:8px"><h2 style="margin:0">Found</h2><div class="spacer"></div>
+        <button class="small" id="rescan">Rescan</button></div>
+      <div id="camera-list" class="stack"><p class="small muted">Looking for cameras…</p></div>
+    </div>
+    <div class="card small muted" style="padding:12px">
+      Cameras come from <code>config/secrets.json</code> under <code>"cameras"</code>
+      (host, username, password, stream). Edits show up on the next refresh.
+    </div>
+  </aside>
+
+  <section class="stack">
+    <div class="feed" id="feed">
+      <div class="empty" id="feed-empty">Choose a camera on the left.</div>
+      <img id="live" class="hidden" alt="Live camera view">
+      <div class="status hidden" id="feed-status"></div>
+    </div>
+    <div class="row small" id="controls" style="visibility:hidden">
+      <label class="row" style="gap:6px">Resolution <select id="resolution" style="width:auto"></select></label>
+      <div class="spacer"></div>
+      <a class="btn small" id="snapshot" target="_blank">Snapshot</a>
+    </div>
+  </section>
+
+  <aside class="card panel" style="padding:14px">
+    <h2 id="meta-title" style="margin-bottom:6px">Details</h2>
+    <div id="meta"><p class="small muted">Camera details appear here.</p></div>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .cam-layout { display: grid; grid-template-columns: 270px minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+  @media (max-width: 1200px) { .cam-layout { grid-template-columns: 250px minmax(0, 1fr); } .cam-layout > aside.panel { grid-column: 1 / -1; } }
+  @media (max-width: 760px) { .cam-layout { grid-template-columns: 1fr; } }
+  .cam-item { display: block; width: 100%; text-align: left; border-radius: 12px; padding: 9px 11px; background: var(--surface-2);
+    border: 1px solid var(--line-soft); color: var(--ink); white-space: normal; }
+  .cam-item.sel { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .cam-item .sub { font-size: 12px; color: var(--ink-2); margin-top: 2px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); display: inline-block; }
+  #meta table.list td:first-child { color: var(--ink-2); width: 46%; }
+  #meta table.list td { word-break: break-word; }
+</style>
+<script src="{% static 'simulation/cameras.js' %}?v={{ asset_v }}"></script>
+{% endblock %}

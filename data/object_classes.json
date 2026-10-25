@@ -1,0 +1,91 @@
+{
+  "classes": [
+    {
+      "key": "car",
+      "label": "Car",
+      "detector_labels": [
+        "car"
+      ],
+      "group": "vehicle",
+      "dimensions": {
+        "length": 4.5,
+        "width": 1.8,
+        "height": 1.5
+      },
+      "moving": true,
+      "subtypes": []
+    },
+    {
+      "key": "bus",
+      "label": "Bus",
+      "detector_labels": [
+        "bus"
+      ],
+      "group": "vehicle",
+      "dimensions": {
+        "length": 12.0,
+        "width": 2.55,
+        "height": 3.2
+      },
+      "moving": true,
+      "subtypes": []
+    },
+    {
+      "key": "truck",
+      "label": "Truck",
+      "detector_labels": [
+        "truck"
+      ],
+      "group": "vehicle",
+      "dimensions": {
+        "length": 8.0,
+        "width": 2.5,
+        "height": 3.5
+      },
+      "moving": true,
+      "subtypes": [
+        {
+          "key": "pickup",
+          "label": "Pickup / van",
+          "max_height": 2.4
+        },
+        {
+          "key": "truck",
+          "label": "Truck",
+          "min_height": 2.4
+        }
+      ]
+    },
+    {
+      "key": "person",
+      "label": "Person",
+      "detector_labels": [
+        "person"
+      ],
+      "group": "person",
+      "dimensions": {
+        "length": 0.5,
+        "width": 0.5,
+        "height": 1.7
+      },
+      "moving": true,
+      "subtypes": [
+        {
+          "key": "child",
+          "label": "Child",
+          "max_height": 1.4,
+          "dimensions": {
+            "length": 0.4,
+            "width": 0.4,
+            "height": 1.15
+          }
+        },
+        {
+          "key": "adult",
+          "label": "Adult",
+          "min_height": 1.4
+        }
+      ]
+    }
+  ]
+}

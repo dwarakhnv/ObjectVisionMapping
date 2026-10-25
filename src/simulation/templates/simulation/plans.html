@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Floor plans · Object Vision Mapping{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:14px">
+  <h1 style="margin:0">Floor plans</h1>
+  <div class="spacer"></div>
+  <select id="plan-select" style="width:auto;min-width:200px"></select>
+  <button class="small" id="plan-new">New</button>
+  <button class="small danger" id="plan-delete">Delete</button>
+  <span class="pill" id="save-state">–</span>
+  <button class="primary small" id="save">Save</button>
+</div>
+
+<div class="card hidden" id="new-card" style="margin-bottom:16px">
+  <h2>New floor plan</h2>
+  <form id="new-form" class="fields" style="align-items:end">
+    <label class="field wide"><span>Name</span><input name="name" required maxlength="80" placeholder="Ground floor"></label>
+    <label class="field"><span>Units</span><select name="units">{% for u in units %}<option value="{{ u }}">{{ u }}</option>{% endfor %}</select></label>
+    <label class="field"><span>Width</span><input name="width" type="number" step="any" min="0.01" value="20" required></label>
+    <label class="field"><span>Height</span><input name="height" type="number" step="any" min="0.01" value="15" required></label>
+    <label class="field wide"><span>Start from an image (optional): a floor plan, a drawing or a photo from above</span><input name="image" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+    <div class="row wide"><button class="primary" type="submit">Create</button><button type="button" id="new-cancel">Cancel</button></div>
+  </form>
+  <p class="small muted" style="margin:8px 0 0">With an image, the plan takes the image's shape; use <b>Set scale</b> afterwards to tell it a real distance.</p>
+</div>
+
+<div id="no-plan" class="card hidden">No floor plans yet. <button class="primary small" id="plan-new-2">New floor plan</button></div>
+
+<div id="editor" class="hidden plan-editor">
+  <div class="card tools">
+    <div class="tool-list" id="tools">
+      <button data-tool="select" title="Select and move (V)">Select</button>
+      <button data-tool="wall" title="Wall: click points, double-click to finish (W)">Wall</button>
+      <button data-tool="room" title="Room: click corners, double-click to close (R)">Room</button>
+      <button data-tool="door" title="Door: click the hinge, then the other side of the opening (D)">Door</button>
+      <button data-tool="window" title="Window: click both ends (N)">Window</button>
+      <button data-tool="box" title="Box (furniture, shelving): drag two corners (B)">Box</button>
+      <button data-tool="label" title="Text label (T)">Label</button>
+      <button data-tool="scale" title="Set the image's scale from a known distance (S)">Set scale</button>
+    </div>
+    <hr>
+    <label class="row small" style="gap:6px"><input type="checkbox" id="snap" checked> Snap to grid</label>
+    <label class="field"><span>Grid (<span class="u"></span>)</span><input id="grid" type="number" step="any" min="0.001"></label>
+    <label class="field"><span>Wall thickness (<span class="u"></span>)</span><input id="thickness" type="number" step="any" min="0"></label>
+    <button class="small" id="fit">Fit to view</button>
+    <button class="small" id="undo">Undo</button>
+  </div>
+  <div class="card stage-card">
+    <canvas id="canvas"></canvas>
+    <div class="hint" id="hint"></div>
+    <div class="coords small muted" id="coords"></div>
+  </div>
+  <div class="card side">
+    <h3 style="margin-top:0">Plan</h3>
+    <div class="fields">
+      <label class="field wide"><span>Name</span><input id="p-name" maxlength="80"></label>
+      <label class="field"><span>Units</span><select id="p-units">{% for u in units %}<option value="{{ u }}">{{ u }}</option>{% endfor %}</select></label>
+      <label class="field"><span>Width</span><input id="p-width" type="number" step="any" min="0.01"></label>
+      <label class="field"><span>Height</span><input id="p-height" type="number" step="any" min="0.01"></label>
+    </div>
+    <p class="small muted" style="margin:6px 0 0">Changing units converts the drawing, so it keeps its real size.</p>
+    <h3>Background image</h3>
+    <div id="bg-panel"></div>
+    <h3>Selected</h3>
+    <div id="sel-panel"><p class="small muted">Click a shape with Select to edit it. Delete removes it.</p></div>
+    <h3>Used by</h3>
+    <div id="used-by" class="small muted">–</div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .plan-editor { display: grid; grid-template-columns: 170px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+  @media (max-width: 1100px) { .plan-editor { grid-template-columns: 1fr; } }
+  .tools { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .tool-list { display: grid; grid-template-columns: 1fr; gap: 4px; }
+  .tool-list button { justify-content: flex-start; border-radius: 10px; }
+  .tool-list button.on { background: var(--accent); color: var(--accent-ink); }
+  .tools hr { border: 0; border-top: 1px solid var(--line-soft); width: 100%; margin: 2px 0; }
+  .stage-card { padding: 0; position: relative; overflow: hidden; height: calc(100vh - 150px); min-height: 480px; }
+  .stage-card canvas { display: block; width: 100%; height: 100%; background: #c7c7cc; touch-action: none; outline: none; }  /* fixed: dark walls must stand out in dark mode too */
+  .stage-card .hint { position: absolute; left: 12px; top: 10px; font-size: 13px; background: color-mix(in srgb, var(--surface) 90%, transparent);
+    padding: 4px 10px; border-radius: 8px; }
+  .stage-card .coords { position: absolute; right: 12px; bottom: 8px; background: color-mix(in srgb, var(--surface) 90%, transparent);
+    padding: 2px 8px; border-radius: 6px; }
+  .side { padding: 14px; max-height: calc(100vh - 150px); overflow: auto; }
+</style>
+<script type="module" src="{% static 'simulation/plans.js' %}?v={{ asset_v }}"></script>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Detect · Object Vision Mapping{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'vendor/leaflet/leaflet.css' %}">{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:14px">
+  <h1 style="margin:0">Detect</h1>
+  <div class="spacer"></div>
+  <label class="row small" style="gap:6px">Environment <select id="env-select" style="width:auto;min-width:180px"></select></label>
+  <label class="row small" style="gap:6px">Camera <select id="cam-select" style="width:auto;min-width:150px"></select></label>
+  <a class="btn small" id="edit-env" href="/environments/">Edit environment</a>
+</div>
+
+<div class="row" style="margin-bottom:12px" id="class-toggles"></div>
+
+<div class="split">
+  <div class="stack">
+    <div class="feed" id="feed">
+      <div class="empty" id="feed-empty">Choose an environment and camera above.</div>
+      <img id="video" class="hidden" alt="">
+      <canvas id="frame" class="hidden"></canvas>
+      <div class="status hidden" id="feed-status"></div>
+    </div>
+    <div class="row small">
+      <div class="segmented" id="overlay-toggles">
+        <button data-k="masks" class="on">Masks</button>
+        <button data-k="boxes" class="on">Boxes</button>
+        <button data-k="labels" class="on">Labels</button>
+        <button data-k="trails" class="on">Trails</button>
+      </div>
+      <div class="spacer"></div>
+      <span class="muted" id="stats"></span>
+    </div>
+  </div>
+  <div class="card panel">
+    <div class="row"><h2 style="margin:0">Objects</h2><div class="spacer"></div><span class="pill" id="count-pill">0</span></div>
+    <p class="small muted" id="camera-note" style="margin:6px 0 10px"></p>
+    <table class="list" id="objects">
+      <thead><tr><th>ID</th><th>Object</th><th>Moving</th><th class="num">Dist.</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div id="detail" class="hidden">
+      <h3 id="detail-title">Object</h3>
+      <table class="list" id="detail-table"><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden;margin-top:16px">
+  <div class="row" style="padding:12px 14px">
+    <h2 style="margin:0">Where they are</h2>
+    <span class="small muted" id="geo-note"></span>
+    <div class="spacer"></div>
+    <button class="small" id="geo-recenter">Re-centre</button>
+    <div class="segmented" id="geo-mode"><button data-mode="2d" class="on">Map</button><button data-mode="3d">3D</button><button data-mode="top">Top</button></div>
+    <div class="segmented" id="geo-ground">
+      <button data-ground="satellite" class="on">Satellite</button><button data-ground="map">Street map</button><button data-ground="none">Plain</button>
+    </div>
+  </div>
+  <div style="position:relative;height:520px">
+    <div id="geo-map" style="position:absolute;inset:0"></div>
+    <div class="viewer hidden" id="geo-3d" style="position:absolute;inset:0;height:auto;border-radius:0;box-shadow:none"></div>
+    <div class="empty muted hidden" id="geo-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:500;background:var(--surface)">
+      This camera needs at least 4 reference points (Environments page) to place objects on the map.</div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .obj-label { background: transparent; border: 0; box-shadow: none; color: #fff; font: 600 11px -apple-system, Segoe UI, sans-serif;
+    text-shadow: 0 0 3px #000, 0 0 3px #000; padding: 0; }
+  .obj-label::before { display: none; }
+  .ref-pin { width: 10px; height: 10px; border-radius: 50%; background: #ff2d92; border: 2px solid #fff; opacity: .7; }
+  .cam-pin { font-size: 16px; line-height: 16px; text-align: center; }
+</style>
+{{ classes|json_script:"object-classes" }}
+<script src="{% static 'vendor/leaflet/leaflet.js' %}"></script>
+<script src="{% static 'vision/overlay.js' %}?v={{ asset_v }}"></script>
+<script type="module" src="{% static 'vision/detect.js' %}?v={{ asset_v }}"></script>
+{% endblock %}

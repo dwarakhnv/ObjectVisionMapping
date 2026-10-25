@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Remote access · Object Vision Mapping{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:14px">
+  <div>
+    <h1 style="margin:0">Remote access</h1>
+    <p class="lead" style="margin:4px 0 0">Let other apps and services read where objects are in an environment.</p>
+  </div>
+  <div class="spacer"></div>
+  <label class="row small" style="gap:6px">Environment <select id="env-select" style="width:auto;min-width:200px">
+    {% for e in envs %}<option value="{{ e.slug }}">{{ e.name }}</option>{% endfor %}</select></label>
+</div>
+
+{% if not envs %}
+<div class="card">Create an environment first (<a href="/environments/">Environments</a>).</div>
+{% else %}
+<div class="remote-grid">
+  <div class="stack">
+    <div class="card">
+      <h2>Access keys</h2>
+      <p class="small muted" style="margin-top:0">Give each app or service its own key, limited to the objects it needs. A key works for this environment only. Revoke it any time.</p>
+      <table class="list" id="subs"><thead><tr><th>Name</th><th>Objects</th><th>Key</th><th>Status</th><th>On</th><th></th></tr></thead><tbody></tbody></table>
+      <form id="new-sub" class="stack" style="margin-top:14px">
+        <h3 style="margin:0">New key</h3>
+        <label class="field"><span>Who or what uses it</span><input name="name" required maxlength="80" placeholder="Parking app, Security dashboard ..."></label>
+        <div>
+          <span class="small muted">Objects it can see (none ticked = all)</span>
+          <div class="row" id="new-classes" style="margin-top:6px"></div>
+        </div>
+        <div><button class="primary" type="submit">Create key</button></div>
+      </form>
+      <div id="new-token" class="token-box hidden">
+        <strong>Copy this key now. It won't be shown again.</strong>
+        <div class="row" style="margin-top:8px"><code id="token-value"></code><button class="small" id="copy-token">Copy</button><button class="small" id="test-token">Test it</button></div>
+        <pre id="test-output" class="hidden"></pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Recordings</h2>
+      <label class="row" style="gap:8px"><input type="checkbox" id="rec-enabled"> Save video when something moves</label>
+      <p class="small muted">From 15 seconds before the movement until 15 seconds after it stops. Long activity is saved in 1-minute pieces. Recording happens while detection runs for this environment: when an app is connected, or the Detect page is open.</p>
+      <div><span class="small muted">Movement that counts (none ticked = any)</span><div class="row" id="rec-classes" style="margin-top:6px"></div></div>
+      <p style="margin-bottom:0"><a class="btn small" id="rec-link" href="/recordings/">Saved recordings</a></p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>How to connect</h2>
+    <ul class="small how">
+      <li>Detection starts when an app connects and <b>stops by itself <span id="idle"></span> s after the last request</b>, so nothing runs (or uses the computer) while nobody is connected. The first answer after a pause may have no objects yet.</li>
+      <li>Send the key in a header, <code>Authorization: Bearer &lt;key&gt;</code>. Browsers' EventSource can't send headers, so it can use <code>?token=&lt;key&gt;</code> instead.</li>
+      <li>Add <code>?classes=person,car</code> to narrow the results further, within what the key allows.</li>
+      <li>Other computers must be on the same network, or reach this one through a VPN or tunnel. Windows may ask to allow Python through the firewall.</li>
+    </ul>
+    <label class="field"><span>Address</span><select id="base-url"></select></label>
+    <div class="segmented" id="ex-tabs" style="margin-top:12px">
+      <button data-ex="poll" class="on">Poll (curl)</button><button data-ex="python">Python</button><button data-ex="stream">Python stream</button><button data-ex="js">JavaScript</button>
+    </div>
+    <pre id="example"></pre>
+    <h3>What you get</h3>
+    <pre id="sample" class="small"></pre>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<style>
+  .remote-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 1100px) { .remote-grid { grid-template-columns: 1fr; } }
+  pre { background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px; overflow: auto; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; }
+  .token-box { margin-top: 14px; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--warn) 14%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
+  .token-box code { font-size: 13px; padding: 4px 8px; word-break: break-all; }
+  .how li { margin-bottom: 6px; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); display: inline-block; }
+</style>
+{{ classes|json_script:"object-classes" }}
+<script src="{% static 'remote/remote.js' %}?v={{ asset_v }}"></script>
+{% endblock %}

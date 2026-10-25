@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+src/.claude
+kernel.errors.txt
+src/kernel.errors.txt
+
+# Secrets: only the example is shared
+config/*
+!config/secrets.example.json
+!config/README.md
+
+# Large or generated data
+data/*
+!data/object_classes.json
+!data/sources/.gitkeep
+

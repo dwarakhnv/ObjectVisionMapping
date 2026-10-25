@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Object Vision Mapping{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Object Vision Mapping</h1>
+  <p class="lead">Turn camera video into a live map of the people and vehicles in a place: where each one is
+    (latitude / longitude outdoors, floor-plan coordinates indoors), what it is and how big, ready for your own apps.</p>
+  <div class="row">
+    <a class="btn primary" href="/detect/">Open Detect</a>
+    <a class="btn" href="/environments/">Set up an environment</a>
+    <a class="btn" href="/remote/">Connect an app</a>
+  </div>
+</section>
+
+<div class="overview">
+  <section class="card">
+    <h2>Getting started</h2>
+    <p class="small muted" style="margin-top:-4px">Your progress on this installation. Each step links to the page where you do it.</p>
+    <ol class="steps">
+      {% for s in steps %}
+      <li class="{% if s.done %}done{% elif s.done is None %}info{% endif %}">
+        <span class="mark">{% if s.done %}✓{% else %}{{ forloop.counter }}{% endif %}</span>
+        <div>
+          <div class="row" style="gap:8px">
+            <strong>{{ s.title }}</strong>
+            {% if s.optional %}<span class="pill">Optional</span>{% endif %}
+            {% if s.status %}<span class="pill {% if s.done %}good{% endif %}">{{ s.status }}</span>{% endif %}
+          </div>
+          <p class="small muted">{{ s.text }}</p>
+          <a class="small" href="{{ s.url }}">{{ s.link }} →</a>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  <aside class="stack">
+    <section class="card">
+      <h2>Your environments</h2>
+      {% if envs %}
+      <table class="list">
+        <thead><tr><th>Name</th><th>Map</th><th class="num">Cameras</th><th>Tracking</th></tr></thead>
+        <tbody>
+        {% for e in envs %}
+          <tr>
+            <td><a href="/environments/?env={{ e.slug }}">{{ e.name }}</a></td>
+            <td class="small muted">{% if e.space.kind == "plan" %}Floor plan{% else %}Outdoor map{% endif %}</td>
+            <td class="num">{{ e.cameras|length }}</td>
+            <td class="small">{% if e.tracking %}On{% else %}<span class="muted">Off</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="small muted">None yet. <a href="/environments/">Create your first environment →</a></p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Run it</h2>
+      <pre class="code">py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+cd src
+..\.venv\Scripts\python manage.py runserver 0.0.0.0:7080</pre>
+      <p class="small muted">Camera passwords live only in <code>config/secrets.json</code> (see <code>config/secrets.example.json</code>).
+        Everything else is saved under <code>data/</code>.</p>
+      <h3>Settings (environment variables)</h3>
+      <table class="list small">
+        {% for name, value, help in settings %}
+        <tr><td><code>{{ name }}</code></td><td class="num">{{ value }}</td><td class="muted">{{ help }}</td></tr>
+        {% endfor %}
+      </table>
+    </section>
+  </aside>
+</div>
+
+<h2 style="margin:28px 0 12px">What's in it</h2>
+<div class="features">
+  <a class="card feature" href="/cameras/">
+    <strong>Cameras</strong>
+    <p>Watch any network (RTSP) or local camera live, with its resolution and details.</p>
+  </a>
+  <a class="card feature" href="/detect/">
+    <strong>Detect</strong>
+    <p>People, cars, buses, trucks and more outlined on the live video, each with its size, distance and location,
+      plus a live map or 3D view of the environment.</p>
+  </a>
+  <a class="card feature" href="/environments/">
+    <strong>Environments</strong>
+    <p>Pair video pixels with map points so detections get real-world locations. Camera position, height and angle
+      are estimated from the points. Turn tracking on or off per environment.</p>
+  </a>
+  <a class="card feature" href="/plans/">
+    <strong>Floor plans</strong>
+    <p>Draw indoor maps to scale (m, ft, …) with walls, rooms, doors and windows, or trace over an image.</p>
+  </a>
+  <a class="card feature" href="/recordings/">
+    <strong>Recordings</strong>
+    <p>Clips saved automatically around activity, chosen by object class. Play them with detections on top,
+      download or delete.</p>
+  </a>
+  <a class="card feature" href="/remote/">
+    <strong>Remote access API</strong>
+    <p>Access keys per app. Poll, long-poll or stream the environment's objects the moment a new result exists.</p>
+  </a>
+</div>
+
+<h2 style="margin:28px 0 12px">How it works</h2>
+<div class="card">
+  <ol class="flow">
+    <li><strong>Read</strong><span>Each camera is read at its own frame rate; the live video never waits for detection.</span></li>
+    <li><strong>Detect</strong><span>The newest frame goes through a YOLO segmentation model, on the Intel GPU (OpenVINO) when there is one.</span></li>
+    <li><strong>Place</strong><span>Where an object touches the ground is mapped through the camera's reference points to the map.</span></li>
+    <li><strong>Merge</strong><span>An environment's cameras are combined: one object seen by two cameras is reported once.</span></li>
+    <li><strong>Share</strong><span>Apps get the result straight away over the API, filtered to the classes their key allows.</span></li>
+  </ol>
+  <p class="small muted" style="margin:14px 0 0">
+    <strong>Tracking</strong> is off by default: each result lists what is in the latest frame, so nothing is missed
+    while it's being matched up. Turn it on for an environment (Environments page, “Track objects”) to get stable ids,
+    speed, heading and prediction ahead between results.
+    {% if tracking_on %}On now for: {{ tracking_on|join:", " }}.{% endif %}
+  </p>
+</div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .hero { padding: 18px 0 22px; max-width: 760px; }
+  .hero h1 { font-size: 36px; }
+  .hero .lead { font-size: 17px; }
+  .overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 16px; align-items: start; }
+  @media (max-width: 1000px) { .overview { grid-template-columns: 1fr; } }
+  .steps { list-style: none; margin: 8px 0 0; padding: 0; }
+  .steps li { display: grid; grid-template-columns: 30px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+  .steps li:first-child { border-top: 0; }
+  .steps p { margin: 4px 0 4px; }
+  .steps .mark { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 13px;
+    background: var(--line-soft); color: var(--ink-2); }
+  .steps li.done .mark { background: var(--good); color: #fff; }
+  .features { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .feature { color: var(--ink); display: block; transition: transform .12s; }
+  .feature:hover { text-decoration: none; transform: translateY(-2px); }
+  .feature p { color: var(--ink-2); font-size: 13.5px; margin: 6px 0 0; }
+  .flow { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; counter-reset: f; }
+  .flow li { counter-increment: f; }
+  .flow li strong { display: block; }
+  .flow li strong::before { content: counter(f) ". "; color: var(--accent); }
+  .flow li span { font-size: 13px; color: var(--ink-2); }
+  pre.code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--line-soft); padding: 10px 12px;
+    border-radius: 10px; overflow-x: auto; margin: 0 0 10px; }
+  table.list td.num { text-align: right; white-space: nowrap; }
+</style>
+{% endblock %}

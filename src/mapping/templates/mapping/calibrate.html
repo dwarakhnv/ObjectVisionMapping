@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Calibrate · {{ env.name }}{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:12px">
+  <div>
+    <div class="small muted"><a href="/mapping/">Mapping</a> / <a href="/legacy/environments/{{ slug }}/">{{ env.name }}</a> /</div>
+    <h1>Calibrate cameras</h1>
+  </div>
+  <div class="spacer"></div>
+  <label class="field" style="min-width:220px"><span>Camera</span><select id="camera-select"></select></label>
+  <a class="btn" style="align-self:flex-end" href="/mapping/{{ slug }}/live/">Live map</a>
+</div>
+{% if not env.cameras %}
+<div class="card">This environment has no cameras yet. <a href="/legacy/environments/{{ slug }}/">Add cameras and reference points</a> first.</div>
+{% elif not env.reference_points %}
+<div class="card">This environment has no reference points yet. <a href="/legacy/environments/{{ slug }}/">Add at least 4 reference points</a> that the camera can see.</div>
+{% else %}
+<div class="split">
+  <div class="stack">
+    <div class="row small">
+      <div class="segmented" id="image-mode">
+        <button data-mode="live">Live frame</button>
+        <button data-mode="upload">Uploaded image</button>
+      </div>
+      <button class="small" id="refresh">Refresh frame</button>
+      <label class="btn small">Upload image<input type="file" id="upload" accept="image/*" hidden></label>
+      <div class="spacer"></div>
+      <div class="segmented" id="show">
+        <button data-k="grid" class="on">Ground grid</button>
+        <button data-k="reproj" class="on">Predicted points</button>
+      </div>
+    </div>
+    <div class="feed" id="stage" style="cursor:crosshair">
+      <div class="empty" id="stage-empty">Loading image…</div>
+      <canvas id="calib" class="hidden" style="display:block;width:100%"></canvas>
+      <canvas id="loupe" width="180" height="180" class="hidden" style="position:absolute;pointer-events:none;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.5)"></canvas>
+    </div>
+    <p class="small muted" id="image-info"></p>
+  </div>
+  <div class="card panel">
+    <h2 id="cam-title">Camera</h2>
+    <p class="small muted">Select a reference point, then click where it appears in the image. Drag a marker to adjust it. Place at least 4 points spread across the ground (6 or more to also estimate the field of view).</p>
+    <table class="list" id="points"><thead><tr><th>Point</th><th>Pixel</th><th class="num">Error</th><th></th></tr></thead><tbody></tbody></table>
+    <h3>Solve</h3>
+    <label class="row small" style="gap:6px"><input type="checkbox" id="estimate-fov"> Also estimate the field of view (6+ points)</label>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="solve">Solve camera pose</button>
+      <button class="small" id="reset">Mark uncalibrated</button>
+    </div>
+    <div id="result" style="margin-top:12px"></div>
+    <h3>Current camera settings</h3>
+    <table class="list" id="cam-table"><tbody></tbody></table>
+    <p class="small muted" style="margin-top:10px">Clicks are stored as fractions of the image width and height, so the calibration holds when the feed runs at another resolution with the same shape (e.g. 1920×1080 and 1280×720).</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>window.OVM_ENV_SLUG = "{{ slug|escapejs }}";</script>
+<script src="{% static 'mapping/calibrate.js' %}?v={{ asset_v }}"></script>
+{% endblock %}

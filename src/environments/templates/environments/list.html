@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Environments · Object Vision Mapping{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:18px">
+  <div>
+    <h1>Environments</h1>
+    <p class="lead" style="margin:0">A 3D space with surveyed reference points and fixed cameras. Each one is saved to <code>data/environments/&lt;name&gt;/environment.json</code>.</p>
+  </div>
+  <div class="spacer"></div>
+  <button class="primary" id="new-btn">New environment</button>
+</div>
+
+<div class="card hidden" id="new-card" style="margin-bottom:16px">
+  <h2>New environment</h2>
+  <form id="new-form" class="stack">
+    <div class="fields">
+      <label class="field wide"><span>Name</span><input name="name" required maxlength="80" placeholder="Main Street & 5th"></label>
+      <label class="field wide"><span>Description</span><input name="description" maxlength="500" placeholder="Optional"></label>
+    </div>
+    <div>
+      <div class="segmented" id="kind">
+        <button type="button" data-kind="local" class="on">Custom units</button>
+        <button type="button" data-kind="geo">Geo (lat / lon, metres)</button>
+      </div>
+    </div>
+    <div class="fields" id="local-fields">
+      <label class="field"><span>Unit name</span><input name="units" value="m"></label>
+      <label class="field"><span>Metres per unit</span><input name="meters_per_unit" type="number" step="any" value="1" min="0.000001"></label>
+      <label class="field"><span>Ground level (units)</span><input name="ground" type="number" step="any" value="0"></label>
+      <label class="field"><span>Size to show (units)</span><input name="extent" type="number" step="any" value="100" min="0.001"></label>
+    </div>
+    <div class="fields hidden" id="geo-fields">
+      <label class="field"><span>Origin latitude</span><input name="lat" type="number" step="any" min="-90" max="90" placeholder="40.7128"></label>
+      <label class="field"><span>Origin longitude</span><input name="lon" type="number" step="any" min="-180" max="180" placeholder="-74.0060"></label>
+      <label class="field"><span>Ground altitude (m)</span><input name="alt" type="number" step="any" value="0"></label>
+      <label class="field"><span>Size to show (m)</span><input name="geo_extent" type="number" step="any" value="200" min="0.001"></label>
+    </div>
+    <p class="small muted">Custom units suit a floor plan, a car park or a lab (e.g. feet: 0.3048 m per unit). Geo suits outdoor sites surveyed with GPS; heights are in metres.</p>
+    <div class="row"><button class="primary" type="submit">Create</button><button type="button" id="cancel">Cancel</button></div>
+  </form>
+</div>
+
+{% if environments %}
+<div class="grid cols-2">
+  {% for e in environments %}
+  <a class="card" href="/legacy/environments/{{ e.slug }}/" style="color:inherit;text-decoration:none">
+    <h2 style="margin-bottom:4px">{{ e.name }}</h2>
+    <div class="muted small" style="margin-bottom:10px">{{ e.description|default:"No description" }}</div>
+    <div class="row">
+      <span class="pill">{% if e.kind == "geo" %}Geo{% else %}{{ e.units }}{% endif %}</span>
+      <span class="pill">{{ e.reference_points }} reference point{{ e.reference_points|pluralize }}</span>
+      <span class="pill">{{ e.cameras }} camera{{ e.cameras|pluralize }}</span>
+      {% if e.calibrated %}<span class="pill good">{{ e.calibrated }} calibrated</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card muted">No environments yet. Create one to place reference points and cameras.</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const card = document.getElementById("new-card"), form = document.getElementById("new-form");
+  let kind = "local";
+  document.getElementById("new-btn").onclick = () => { card.classList.remove("hidden"); form.name.focus(); };
+  document.getElementById("cancel").onclick = () => card.classList.add("hidden");
+  document.querySelectorAll("#kind button").forEach(b => b.onclick = () => {
+    kind = b.dataset.kind;
+    document.querySelectorAll("#kind button").forEach(x => x.classList.toggle("on", x === b));
+    document.getElementById("local-fields").classList.toggle("hidden", kind !== "local");
+    document.getElementById("geo-fields").classList.toggle("hidden", kind !== "geo");
+  });
+  form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const f = form.elements;
+    const body = { name: f.name.value, description: f.description.value };
+    if (kind === "local") {
+      body.coordinates = { kind: "local", units: f.units.value, meters_per_unit: f.meters_per_unit.value, ground: f.ground.value };
+      body.extent = f.extent.value;
+    } else {
+      body.coordinates = { kind: "geo", origin: { lat: f.lat.value, lon: f.lon.value, alt: f.alt.value }, ground: f.alt.value };
+      body.extent = f.geo_extent.value;
+    }
+    try {
+      const r = await OVM.api("/api/environments", { method: "POST", body });
+      location.href = "/legacy/environments/" + r.environment.slug + "/";
+    } catch (e) { OVM.toast(e.message, "error"); }
+  };
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Object Vision Mapping{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'ovm/ovm.css' %}?v={{ asset_v }}">
+  <script type="importmap">{"imports": {"three": "{% static 'vendor/three/three.module.js' %}", "three/addons/": "{% static 'vendor/three/addons/' %}", "ovm/scene3d.js": "{% static 'ovm/scene3d.js' %}?v={{ asset_v }}", "/static/simulation/maptiles.js": "{% static 'simulation/maptiles.js' %}?v={{ asset_v }}", "/static/simulation/groundview.js": "{% static 'simulation/groundview.js' %}?v={{ asset_v }}", "/static/simulation/planrender.js": "{% static 'simulation/planrender.js' %}?v={{ asset_v }}", "/static/simulation/basemap.js": "{% static 'simulation/basemap.js' %}?v={{ asset_v }}"}}</script>
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+  <header class="topbar">
+    <a class="brand" href="/">Object Vision Mapping</a>
+    <nav>
+      <a href="/" class="{% if request.path == '/' %}active{% endif %}">Home</a>
+      <a href="/cameras/" class="{% if request.path|slice:':9' == '/cameras/' %}active{% endif %}">Cameras</a>
+      <a href="/detect/" class="{% if request.path|slice:':8' == '/detect/' %}active{% endif %}">Detect</a>
+      <a href="/environments/" class="{% if request.path|slice:':14' == '/environments/' %}active{% endif %}">Environments</a>
+      <a href="/plans/" class="{% if request.path|slice:':7' == '/plans/' %}active{% endif %}">Floor plans</a>
+      <a href="/recordings/" class="{% if request.path|slice:':12' == '/recordings/' %}active{% endif %}">Recordings</a>
+      <a href="/remote/" class="{% if request.path|slice:':8' == '/remote/' %}active{% endif %}">Remote access</a>
+    </nav>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  {% csrf_token %}
+  <script src="{% static 'ovm/common.js' %}?v={{ asset_v }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

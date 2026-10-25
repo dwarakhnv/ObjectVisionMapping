@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ env.name }} · Environments{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:12px">
+  <div>
+    <div class="small muted"><a href="/legacy/environments/">Environments</a> /</div>
+    <h1 id="env-title">{{ env.name }}</h1>
+  </div>
+  <div class="spacer"></div>
+  <span class="pill" id="dirty-pill">Saved</span>
+  <a class="btn" href="/mapping/{{ slug }}/">Calibrate cameras</a>
+  <a class="btn" href="/mapping/{{ slug }}/live/">Live map</a>
+  <button class="primary" id="save-btn" disabled>Save</button>
+</div>
+<div class="split">
+  <div class="viewer" id="viewer">
+    <div class="overlay">
+      <div class="segmented" id="view-mode">
+        <button data-mode="3d" class="on">3D</button>
+        <button data-mode="top">Top</button>
+      </div>
+      <div class="segmented" id="layers">
+        <button data-layer="refpoints" class="on">Points</button>
+        <button data-layer="cameras" class="on">Cameras</button>
+        <button data-layer="footprints" class="on">Coverage</button>
+        <button data-layer="labels" class="on">Labels</button>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--refpoint)"></i>Reference point</span>
+      <span><i class="dot" style="background:var(--camera)"></i>Camera</span>
+      <span><i class="dot" style="background:var(--accent);opacity:.4"></i>Ground in view</span>
+      <span><i class="dot" style="background:var(--danger)"></i>North</span>
+      <span id="grid-note"></span>
+    </div>
+    <div class="pill hidden" id="pick-hint" style="position:absolute;right:12px;top:12px;z-index:3;background:var(--accent);color:#fff">Click the ground…</div>
+  </div>
+  <div class="card panel">
+    <div class="segmented" id="tabs" style="margin-bottom:12px">
+      <button data-tab="points" class="on">Reference points</button>
+      <button data-tab="cameras">Cameras</button>
+      <button data-tab="settings">Environment</button>
+    </div>
+    <div id="tab-points"></div>
+    <div id="tab-cameras" class="hidden"></div>
+    <div id="tab-settings" class="hidden"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>window.OVM_ENV_SLUG = "{{ slug|escapejs }}";</script>
+<script type="module" src="{% static 'environments/explorer.js' %}?v={{ asset_v }}"></script>
+{% endblock %}

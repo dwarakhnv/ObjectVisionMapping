@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Live map · {{ env.name }}{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:12px">
+  <div>
+    <div class="small muted"><a href="/mapping/">Mapping</a> / <a href="/legacy/environments/{{ slug }}/">{{ env.name }}</a> /</div>
+    <h1>Live map</h1>
+  </div>
+  <div class="spacer"></div>
+  <div class="row" id="class-toggles"></div>
+  <a class="btn" href="/mapping/{{ slug }}/">Calibrate</a>
+</div>
+<div class="split">
+  <div class="viewer" id="viewer">
+    <div class="overlay">
+      <div class="segmented" id="view-mode">
+        <button data-mode="3d" class="on">3D</button>
+        <button data-mode="top">Top</button>
+      </div>
+      <div class="segmented" id="layers">
+        <button data-layer="refpoints">Points</button>
+        <button data-layer="footprints" class="on">Coverage</button>
+        <button data-layer="labels" class="on">Labels</button>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+  <div class="panel stack">
+    <div id="tiles" class="stack"></div>
+    <div class="card">
+      <div class="row"><h2 style="margin:0">In the environment</h2><div class="spacer"></div><span class="pill" id="count-pill">0</span></div>
+      <table class="list" id="objects" style="margin-top:8px">
+        <thead><tr><th>ID</th><th>Object</th><th>Position</th><th class="num">Speed</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="small muted" id="note" style="margin-top:8px"></p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ classes|json_script:"object-classes" }}
+<script>window.OVM_ENV_SLUG = "{{ slug|escapejs }}";</script>
+<script src="{% static 'vision/overlay.js' %}?v={{ asset_v }}"></script>
+<script type="module" src="{% static 'mapping/livemap.js' %}?v={{ asset_v }}"></script>
+{% endblock %}

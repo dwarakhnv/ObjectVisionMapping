@@ -1,0 +1,12 @@
+# CPU builds of torch/torchvision (smaller); for an NVIDIA GPU use the CUDA index instead.
+--extra-index-url https://download.pytorch.org/whl/cpu
+Django>=4.2,<5
+numpy>=1.26
+scipy>=1.11
+opencv-python-headless>=4.9
+torch>=2.2
+torchvision>=0.17
+ultralytics>=8.3
+cv2_enumerate_cameras>=1.1
+shapely>=2.0
+openvino>=2024.0      # runs the detector on an Intel GPU, several times faster (optional)

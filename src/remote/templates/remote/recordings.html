@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Saved recordings · Object Vision Mapping{% endblock %}
+{% block content %}
+<div class="row" style="margin-bottom:14px">
+  <div>
+    <h1 style="margin:0">Saved recordings</h1>
+    <p class="lead" style="margin:4px 0 0" id="summary">Video saved around movement while detection runs.</p>
+  </div>
+  <div class="spacer"></div>
+  <label class="row small" style="gap:6px">Environment <select id="env-select" style="width:auto;min-width:200px">
+    {% for e in envs %}<option value="{{ e.slug }}">{{ e.name }}</option>{% endfor %}</select></label>
+  <a class="btn small" id="settings-link" href="/remote/">Recording settings</a>
+</div>
+
+{% if not envs %}
+<div class="card">Create an environment first (<a href="/environments/">Environments</a>).</div>
+{% else %}
+<div class="rec-layout">
+  <div class="card player-card">
+    <div class="player" id="player">
+      <div class="empty" id="player-empty">Pick a recording.</div>
+      <video id="video" class="hidden" controls preload="metadata"></video>
+      <canvas id="boxes" class="hidden"></canvas>
+    </div>
+    <div class="row small" style="margin-top:10px">
+      <strong id="rec-title"></strong>
+      <span class="muted" id="rec-info"></span>
+      <div class="spacer"></div>
+      <label class="row" style="gap:6px"><input type="checkbox" id="show-boxes" checked> Show detections</label>
+      <a class="btn small hidden" id="download" download>Download</a>
+      <button class="small danger hidden" id="delete">Delete</button>
+    </div>
+  </div>
+  <div class="card list-card">
+    <div class="row"><h2 style="margin:0">Clips</h2><div class="spacer"></div><span class="pill" id="count">0</span></div>
+    <div id="list" class="rec-list"></div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<style>
+  .rec-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+  @media (max-width: 1000px) { .rec-layout { grid-template-columns: 1fr; } }
+  .player-card { padding: 12px; }
+  .player { position: relative; background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16 / 9; }
+  .player video, .player canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  .player canvas { pointer-events: none; }
+  .player .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #8e8e93; }
+  .list-card { padding: 12px; max-height: calc(100vh - 150px); overflow: auto; }
+  .rec-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .rec-item { display: grid; grid-template-columns: 112px 1fr; gap: 10px; padding: 6px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
+  .rec-item:hover { background: var(--line-soft); }
+  .rec-item.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .rec-item img { width: 112px; height: 63px; object-fit: cover; border-radius: 6px; background: #000; }
+  .rec-day { font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 8px 0 0; }
+</style>
+{{ classes|json_script:"object-classes" }}
+<script src="{% static 'remote/recordings.js' %}?v={{ asset_v }}"></script>
+{% endblock %}
