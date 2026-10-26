@@ -149,12 +149,27 @@ class RemoteApiTests(TempData):
         self.env()
         r = self.client.put("/api/remote/lot/recording", json.dumps({"enabled": False, "classes": ["person"]}),
                             content_type="application/json")
-        self.assertEqual(r.json()["recording"], {"enabled": False, "classes": ["person"]})
+        self.assertEqual(r.json()["recording"], {"enabled": False, "classes": ["person"], "region": []})
         r = self.client.put("/api/remote/lot/recording", json.dumps({"enabled": True, "classes": ["dragon"]}),
                             content_type="application/json")
         self.assertEqual(r.status_code, 400)
         self.assertEqual(self.client.get("/remote/").status_code, 200)
         self.assertEqual(self.client.get("/recordings/").status_code, 200)
+
+    def test_recording_region(self):
+        self.env()
+        put = lambda body: self.client.put("/api/remote/lot/recording", json.dumps(body), content_type="application/json")  # noqa: E731
+        put({"classes": ["person"]})
+        square = [{"lat": 35.685, "lon": -78.878}, {"lat": 35.685, "lon": -78.8779},
+                  {"lat": 35.6851, "lon": -78.8779}, {"lat": 35.6851, "lon": -78.878}]
+        r = put({"region": square}).json()["recording"]
+        self.assertEqual((r["classes"], len(r["region"])), (["person"], 4))  # only the region changed
+        self.assertEqual(put({"enabled": False}).json()["recording"]["region"], r["region"])
+        self.assertEqual(put({"region": square[:2]}).status_code, 400)                       # 2 corners
+        self.assertEqual(put({"region": [square[0]] * 3}).status_code, 400)                  # no area
+        self.assertEqual(put({"region": [{"lat": 95, "lon": 0}] + square[1:]}).status_code, 400)
+        self.assertEqual(put({"region": []}).json()["recording"]["region"], [])
+        self.assertEqual(len(self.client.get("/api/remote/lot").json()["cameras"][0]["points"]), 5)
 
 
 class FakeCam:
@@ -235,6 +250,25 @@ class RecorderTests(TempData):
         self.assertFalse(recs[0]["continued"])
         self.assertTrue(all(r["continued"] for r in recs[1:]))
         self.assertTrue(all(r["duration_s"] <= 3.3 for r in recs[:-1]))
+
+    def test_movement_outside_the_region_is_not_recorded(self):
+        rec = self.rec_mod.Recorder("lot", "cam_a", "fake")
+        lat, lon = 35.685, -78.878
+        region = [{"lat": lat - 1e-4, "lon": lon - 1e-4}, {"lat": lat - 1e-4, "lon": lon + 1e-4},
+                  {"lat": lat + 1e-4, "lon": lon + 1e-4}, {"lat": lat + 1e-4, "lon": lon - 1e-4}]
+        end, x = time.time() + 2.0, 0.0
+        while time.time() < end:  # a "person" walking 3 m/s, across the street: outside the region
+            x += 0.3
+            o = dict(obj(1, "person", lat + 5e-4, lon), world=[x, 50.0, 0.0])
+            rec.observe([o], [], "geo", region)
+            time.sleep(0.1)
+        rec.close()
+        self.assertEqual(self.rec_mod.list_recordings("lot"), [])
+        inside = self.rec_mod.region_test(region, "geo")
+        self.assertTrue(inside(obj(1, "person", lat, lon)))
+        self.assertFalse(inside(obj(1, "person", lat + 5e-4, lon)))
+        self.assertFalse(inside({"class": "person"}))           # no map position: can't be inside
+        self.assertTrue(self.rec_mod.region_test([], "geo")({"class": "person"}))
 
     def test_recordings_api_plays_with_ranges_and_deletes(self):
         rec = self.rec_mod.Recorder("lot", "cam_a", "fake")

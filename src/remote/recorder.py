@@ -11,6 +11,10 @@ parked car never records. Once something has moved that far it counts again
 the moment it walks / drives on after a stop, and a stop shorter than
 POST_SECONDS doesn't end the clip, so stop-and-go is one recording.
 
+A recording region (a polygon drawn on the map, Remote access page) limits all
+of this to objects standing inside it: movement elsewhere (trees across the
+street seen as people) never starts or extends a clip.
+
 Movement starts a clip with the buffered video, recording continues while it
 goes on, and stops POST_SECONDS after the last movement. Long activity is saved
 as consecutive SEGMENT_SECONDS clips. Video is encoded in its own thread, so
@@ -36,6 +40,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 from django.conf import settings
+from shapely.geometry import Point, Polygon
+from shapely.prepared import prep
 
 FPS = 10
 PRE_SECONDS = 15
@@ -74,6 +80,19 @@ def ground_xy(obj, map_key):
     if map_key == "geo":  # metres east / north; fine for distances within one place
         return where["lon"] * 111320.0 * math.cos(math.radians(where["lat"])), where["lat"] * 110540.0
     return float(where["x"]), float(where["y"])
+
+
+def region_test(region, map_key):
+    """A function obj -> True when the object stands inside `region` (map points); everything passes without one."""
+    if not region:
+        return lambda obj: True
+    if map_key == "geo":
+        area = prep(Polygon([(p["lon"], p["lat"]) for p in region]))
+        at = lambda w: Point(w["lon"], w["lat"])  # noqa: E731
+    else:
+        area = prep(Polygon([(p["x"], p["y"]) for p in region]))
+        at = lambda w: Point(w["x"], w["y"])  # noqa: E731
+    return lambda obj: bool(obj.get(map_key)) and area.contains(at(obj[map_key]))
 
 
 class ActivityCheck:
@@ -171,10 +190,13 @@ class Recorder:
         self._thread.start()
 
     # ---------------------------------------------------------------- called by the detection worker
-    def observe(self, objects, classes, map_key):
-        """Detections for the newest frame. Starts / extends a clip when something moves."""
+    def observe(self, objects, classes, map_key, region=None):
+        """Detections for the newest frame. Starts / extends a clip when something moves (inside `region`, if set)."""
         now = time.time()
-        moving = self.activity.update(now, objects, classes, map_key)
+        key = (map_key, json.dumps(region or []))
+        if key != getattr(self, "_region_key", None):  # rebuilt only when the region changes
+            self._region_key, self._inside = key, region_test(region, map_key)
+        moving = self.activity.update(now, [o for o in objects if self._inside(o)], classes, map_key)
         with self._lock:
             if moving:
                 self.last_activity = now

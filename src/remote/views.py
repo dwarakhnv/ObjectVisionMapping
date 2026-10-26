@@ -1,5 +1,6 @@
 """Remote access (subscriptions + public API) and Saved Recordings."""
 import json
+import math
 import re
 import socket
 import time
@@ -8,6 +9,7 @@ from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
+from shapely.geometry import Polygon
 
 from simulation.environment import Environment
 from vision import feeds
@@ -81,7 +83,9 @@ def api_remote(request, env):
         a = activity.get(s["id"], {})
         s.update(last_used=a.get("last"), streams=a.get("streams", 0), active=a.get("active", False))
         subs.append(s)
-    cams = [{"id": c.id, "name": c.name, "source": c.source, "located": len(c.reference_points) >= 4} for c in e.cameras]
+    cams = [{"id": c.id, "name": c.name, "source": c.source, "located": len(c.reference_points) >= 4,
+             "points": [{k: v for k, v in rp.to_dict().items() if k != "pixel"} for rp in c.reference_points]}
+            for c in e.cameras]
     return JsonResponse({"environment": {"slug": e.slug, "name": e.name, "map": e.space.to_dict(), "tracking": e.tracking},
                          "subscriptions": subs, "recording": store.recording(env), "cameras": cams,
                          "base_urls": _base_urls(request), "idle_seconds": settings.OVM_FEED_IDLE_SECONDS})
@@ -117,12 +121,38 @@ def api_subscription(request, sub_id):
 
 @require_http_methods(["PUT"])
 def api_recording_settings(request, env):
-    _env_or_404(env)
+    """Change recording settings; send only what changes: enabled, classes, region."""
+    e = _env_or_404(env)
     try:
         body = json.loads(request.body or b"{}")
-        return JsonResponse({"recording": store.set_recording(env, body.get("enabled", True), _clean_classes(body.get("classes")))})
-    except ValueError as exc:
+        changes = {}
+        if "enabled" in body:
+            changes["enabled"] = body["enabled"]
+        if "classes" in body:
+            changes["classes"] = _clean_classes(body["classes"])
+        if "region" in body:
+            changes["region"] = _clean_region(body["region"], e.space.kind)
+        return JsonResponse({"recording": store.set_recording(env, **changes)})
+    except (ValueError, TypeError, KeyError) as exc:
         return _error(exc)
+
+
+def _clean_region(points, kind):
+    """A recording region: 3 or more map points ({lat, lon} outdoors, {x, y} on a plan), or [] for everywhere."""
+    if not points:
+        return []
+    if not isinstance(points, list) or len(points) < 3:
+        raise ValueError("A region needs at least 3 corners")
+    keys = ("lat", "lon") if kind == "geo" else ("x", "y")
+    out = []
+    for p in points:
+        a, b = float(p[keys[0]]), float(p[keys[1]])
+        if not (math.isfinite(a) and math.isfinite(b)) or (kind == "geo" and not (-90 <= a <= 90 and -180 <= b <= 180)):
+            raise ValueError("A region corner is not a valid position")
+        out.append({keys[0]: round(a, 8), keys[1]: round(b, 8)} if kind == "geo" else {keys[0]: round(a, 4), keys[1]: round(b, 4)})
+    if Polygon([(p[keys[1]], p[keys[0]]) if kind == "geo" else (p["x"], p["y"]) for p in out]).area <= 0:
+        raise ValueError("The region's corners are all in a line")
+    return out
 
 
 # ================================================================ public API (other apps and services)

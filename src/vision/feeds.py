@@ -301,7 +301,7 @@ class FeedWorker(threading.Thread):
                 self._recorder = None
         rec = getattr(self, "_recorder", None)
         if rec is not None:
-            rec.observe(objects, self._rec_settings["classes"], map_key)
+            rec.observe(objects, self._rec_settings["classes"], map_key, self._rec_settings.get("region"))
 
     def _geo_camera(self, width, height):
         """(camera, CameraModel or None, cam_info) for an Environments-page camera, reloaded when its file changes."""

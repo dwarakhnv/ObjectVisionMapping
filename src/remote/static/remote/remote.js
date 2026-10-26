@@ -29,6 +29,8 @@
     try { localStorage.setItem("ovm.remoteEnv", env); } catch (e) { /* private mode */ }
     S.data = await api("/api/remote/" + encodeURIComponent(env));
     render();
+    window.OVM_REMOTE_ENV = { env, data: S.data };  // for region.js, whichever loads first
+    document.dispatchEvent(new CustomEvent("ovm:remote-env", { detail: window.OVM_REMOTE_ENV }));
   }
 
   function render() {

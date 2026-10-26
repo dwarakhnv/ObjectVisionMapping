@@ -114,14 +114,25 @@ def authenticate(token, env):
 
 # ---------------------------------------------------------------- recording settings
 def recording(env):
-    """{"enabled": bool, "classes": [...]} for an environment (enabled by default)."""
+    """{"enabled": bool, "classes": [...], "region": [points] or []} for an environment (enabled by default).
+
+    region: the map area where movement counts ({lat, lon} or {x, y} corners); empty means everywhere.
+    """
     with _lock:
-        return dict({"enabled": True, "classes": []}, **_read()["recording"].get(env, {}))
+        return dict({"enabled": True, "classes": [], "region": []}, **_read()["recording"].get(env, {}))
 
 
-def set_recording(env, enabled, classes):
+def set_recording(env, **changes):
+    """Change some of enabled / classes / region; the rest stays as it was."""
     with _lock:
         data = _read()
-        data["recording"][env] = {"enabled": bool(enabled), "classes": sorted(set(classes or []))}
+        current = dict({"enabled": True, "classes": [], "region": []}, **data["recording"].get(env, {}))
+        if "enabled" in changes:
+            current["enabled"] = bool(changes["enabled"])
+        if "classes" in changes:
+            current["classes"] = sorted(set(changes["classes"] or []))
+        if "region" in changes:
+            current["region"] = list(changes["region"] or [])
+        data["recording"][env] = current
         _write(data)
-        return data["recording"][env]
+        return current

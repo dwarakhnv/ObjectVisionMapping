@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Remote access · Object Vision Mapping{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'vendor/leaflet/leaflet.css' %}">{% endblock %}
 {% block content %}
 <div class="row" style="margin-bottom:14px">
   <div>
@@ -42,6 +43,18 @@
       <label class="row" style="gap:8px"><input type="checkbox" id="rec-enabled"> Save video when something moves</label>
       <p class="small muted">Something counts as moving once it's seen steadily and travels at least 2 m, so flickering or stuck false detections and parked cars don't record. From 15 seconds before the movement until 15 seconds after it stops; short stops don't end a clip. Long activity is saved in 1-minute pieces. Recording happens while detection runs for this environment: when an app is connected, or the Detect page is open.</p>
       <div><span class="small muted">Movement that counts (none ticked = any)</span><div class="row" id="rec-classes" style="margin-top:6px"></div></div>
+      <div class="region">
+        <div class="row">
+          <strong class="small">Recording region</strong><span class="pill" id="region-state">–</span>
+          <div class="spacer"></div>
+          <button class="small" id="region-draw">Draw region</button>
+          <button class="small primary hidden" id="region-done">Finish</button>
+          <button class="small hidden" id="region-cancel">Cancel</button>
+          <button class="small danger" id="region-clear">Clear</button>
+        </div>
+        <p class="small muted" style="margin:6px 0 8px">Only movement inside the region is recorded; anything moving outside it (trees across the street detected as people) is ignored. Without a region, movement anywhere the cameras see counts. Click the corners on the map, then Finish; drag a corner to adjust. Pink dots are the cameras' reference points.</p>
+        <div id="region-map"></div>
+      </div>
       <p style="margin-bottom:0"><a class="btn small" id="rec-link" href="/recordings/">Saved recordings</a></p>
     </div>
   </div>
@@ -74,7 +87,15 @@
   .token-box code { font-size: 13px; padding: 4px 8px; word-break: break-all; }
   .how li { margin-bottom: 6px; }
   .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); display: inline-block; }
+  .region { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+  #region-map { height: 360px; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
+  #region-map.drawing { cursor: crosshair; }
+  #region-map.drawing .leaflet-interactive, #region-map.drawing .leaflet-container { cursor: crosshair; }
+  .region-vertex { background: #fff; border: 2px solid #30d158; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+  .region-vertex.close { border-color: #ffd60a; transform: scale(1.3); cursor: pointer; }
 </style>
 {{ classes|json_script:"object-classes" }}
+<script src="{% static 'vendor/leaflet/leaflet.js' %}"></script>
 <script src="{% static 'remote/remote.js' %}?v={{ asset_v }}"></script>
+<script type="module" src="{% static 'remote/region.js' %}?v={{ asset_v }}"></script>
 {% endblock %}
