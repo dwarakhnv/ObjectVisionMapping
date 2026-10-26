@@ -292,7 +292,7 @@ class FeedWorker(threading.Thread):
             if self._rec_settings["enabled"] and rec is None:
                 try:
                     _, cam = load_geo_camera(self.feed_id)
-                    self._recorder = recorder.Recorder(slug, cam_id, cam.source)
+                    self._recorder = recorder.Recorder(slug, cam_id, cam.source, groups=registry().groups())
                 except Exception:  # never let recording stop detection
                     traceback.print_exc()
                     self._recorder = None

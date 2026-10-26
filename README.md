@@ -44,9 +44,12 @@ Docs: [Remote API](docs/REMOTE_API.md) · [Technical details](docs/TECHNICAL.md)
   - **Getting results:** poll, long-poll or stream (Server-Sent Events). Each
     result is pushed the moment it exists, about 0.1–0.2 s after the camera
     took the frame.
-- **Record activity:** clips are saved automatically around movement of
-  chosen classes (15 s before to 15 s after). You can play them back with
-  detections drawn on top, download them or delete them.
+- **Record activity:** clips are saved automatically when something of the
+  chosen classes really moves: it is seen steadily and travels at least 2 m.
+  The clip runs from 15 s before to 15 s after. A false detection stuck on one
+  spot or a parked car never starts one. This works with tracking on or off.
+  You can play clips back with detections drawn on top, download them or
+  delete them.
 - **Stay fast and light:**
   - **Live video** never waits for detection.
   - **Detection runs on the GPU** when there is one.
@@ -292,12 +295,16 @@ config/secrets.json            camera credentials and site secret (not committed
 - **Compute only when needed:**
   - **Detection:** runs only while someone is watching (Detect page) or
     connected (API), and stops 30 s after the last request.
-  - **Recordings:** made while detection runs, from 15 s before movement to
-    15 s after it. Long activity is saved in 1-minute clips.
+  - **Recordings:** made while detection runs (an app is connected or the
+    Detect page is open), from 15 s before movement to 15 s after it.
+    Movement means seen steadily and travelling 2 m on the ground. A stop
+    shorter than 15 s doesn't end the clip. Video is encoded in the
+    background, so it never holds up detection. Long activity is saved in
+    1-minute clips.
 
 ## Tests
 
-`..\.venv\Scripts\python manage.py test tests` (from `src/`) runs 74 tests.
+`..\.venv\Scripts\python manage.py test tests` (from `src/`) runs 77 tests.
 Nothing in them touches real cameras or the real `data/` folder. They cover:
 - geometry and the pixel-to-map mapping against simulated cameras (outdoors
   and on floor plans), and the pose estimate
@@ -308,6 +315,8 @@ Nothing in them touches real cameras or the real `data/` folder. They cover:
 - live results reaching clients at once (long polling), prediction ahead, the
   detector's input shape, and GPU selection
 - tracking on/off per environment, and faint or fast objects shown at once
+- what starts a recording (steady, 2 m of movement; not noise on one spot,
+  not parked cars), with or without tracking
 - recording clip rules (before, after, 1-minute pieces) with real video
   encoding, and playback with seeking
 - local cameras

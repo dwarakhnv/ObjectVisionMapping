@@ -40,7 +40,7 @@
     <div class="card">
       <h2>Recordings</h2>
       <label class="row" style="gap:8px"><input type="checkbox" id="rec-enabled"> Save video when something moves</label>
-      <p class="small muted">From 15 seconds before the movement until 15 seconds after it stops. Long activity is saved in 1-minute pieces. Recording happens while detection runs for this environment: when an app is connected, or the Detect page is open.</p>
+      <p class="small muted">Something counts as moving once it's seen steadily and travels at least 2 m, so flickering or stuck false detections and parked cars don't record. From 15 seconds before the movement until 15 seconds after it stops; short stops don't end a clip. Long activity is saved in 1-minute pieces. Recording happens while detection runs for this environment: when an app is connected, or the Detect page is open.</p>
       <div><span class="small muted">Movement that counts (none ticked = any)</span><div class="row" id="rec-classes" style="margin-top:6px"></div></div>
       <p style="margin-bottom:0"><a class="btn small" id="rec-link" href="/recordings/">Saved recordings</a></p>
     </div>

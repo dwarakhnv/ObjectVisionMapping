@@ -176,7 +176,8 @@ class RecorderTests(TempData):
         super().setUp()
         from remote import recorder
         self.rec_mod = recorder
-        self.consts = mock.patch.multiple(recorder, PRE_SECONDS=1.0, POST_SECONDS=1.0, SEGMENT_SECONDS=3.0, FPS=10)
+        self.consts = mock.patch.multiple(recorder, PRE_SECONDS=1.0, POST_SECONDS=1.0, SEGMENT_SECONDS=3.0, FPS=10,
+                                          MIN_MOVE_M=1.0)
         self.consts.start()
         self.cams = [mock.patch("simulation.camera.acquire", return_value=FakeCam()),
                      mock.patch("simulation.camera.release")]
@@ -190,24 +191,31 @@ class RecorderTests(TempData):
         super().tearDown()
 
     def feed(self, rec, seconds, moving):
+        """A person standing still, or walking at 3 m/s; ids change every result, as without tracking."""
         end = time.time() + seconds
         while time.time() < end:
-            rec.observe([obj(1, "person", 35.685, -78.878, moving=moving)], [], "geo")
+            if moving:
+                self.x = getattr(self, "x", 0.0) + 0.3
+            o = dict(obj(int(time.time() * 1000) % 997, "person", 35.685, -78.878), world=[getattr(self, "x", 0.0), 10.0, 0.0])
+            rec.observe([o], [], "geo")
             time.sleep(0.1)
 
     def test_clip_has_pre_roll_and_post_roll(self):
         rec = self.rec_mod.Recorder("lot", "cam_a", "fake")
+        longer = mock.patch.object(self.rec_mod, "SEGMENT_SECONDS", 10.0)
+        longer.start()
+        self.addCleanup(longer.stop)
         self.feed(rec, 1.5, moving=False)   # quiet: only buffered
         self.assertEqual(self.rec_mod.list_recordings("lot"), [])
         self.feed(rec, 1.0, moving=True)    # activity
         self.feed(rec, 1.8, moving=False)   # quiet again: the clip ends ~1 s later
         rec.close()
         recs = self.rec_mod.list_recordings("lot")
-        self.assertEqual(len(recs), 1)
+        self.assertEqual(len(recs), 1, recs)
         r = recs[0]
-        # ~1 s before + ~1 s of movement + ~1 s after
-        self.assertGreater(r["duration_s"], 2.4)
-        self.assertLess(r["duration_s"], 4.0)
+        # ~1 s before + the movement (from once it has gone 1 m, until ~2 s after it stops) + ~1 s after
+        self.assertGreater(r["duration_s"], 2.2)
+        self.assertLess(r["duration_s"], 5.0)
         self.assertEqual(r["seen"], {"person": 1})
         self.assertTrue(r["thumbnail"])
         video = self.rec_mod.recording_path("lot", r["id"], "video")
@@ -230,7 +238,7 @@ class RecorderTests(TempData):
 
     def test_recordings_api_plays_with_ranges_and_deletes(self):
         rec = self.rec_mod.Recorder("lot", "cam_a", "fake")
-        self.feed(rec, 0.6, moving=True)
+        self.feed(rec, 1.2, moving=True)
         rec.close()
         self.env()
         rid = self.client.get("/api/recordings/lot").json()["recordings"][0]["id"]
@@ -243,6 +251,44 @@ class RecorderTests(TempData):
         self.assertEqual(self.client.get("/api/recordings/lot/../../remote.webm").status_code, 404)
         self.assertEqual(self.client.delete("/api/recordings/lot/" + rid).status_code, 200)
         self.assertEqual(self.client.get("/api/recordings/lot").json()["recordings"], [])
+
+
+class ActivityTests(SimpleTestCase):
+    """What starts a recording: steady sightings that travel 2 m, with or without tracking."""
+
+    def run_check(self, positions, classes=(), seconds=20.0, dt=0.12):
+        """positions(t) -> [(class, x, y)] for each result; returns the times something counted as moving."""
+        from remote.recorder import ActivityCheck
+        check, hits = ActivityCheck({"car": "vehicle", "truck": "vehicle"}), []
+        for i in range(int(seconds / dt)):
+            t = 1000.0 + i * dt
+            objs = [{"id": 1 + (i * 7 + k) % 13, "class": c, "world": [x, y, 0.0]} for k, (c, x, y) in enumerate(positions(i * dt, i))]
+            if check.update(t, objs, list(classes), "geo"):
+                hits.append(i * dt)
+        return hits
+
+    def test_noise_on_one_spot_never_counts(self):
+        rng = np.random.default_rng(1)
+        jitter = lambda: rng.normal(0, 0.3)  # noqa: E731  feet of a far, false "person" wobble
+        self.assertEqual(self.run_check(lambda t, i: [("person", 30 + jitter(), 40 + jitter())]), [])
+        # flickering: seen in one result of three, sometimes a little off
+        self.assertEqual(self.run_check(lambda t, i: [("person", 12 + jitter(), 5)] if i % 3 == 0 else []), [])
+
+    def test_walking_person_counts_and_again_after_a_short_stop(self):
+        def walk(t, i):  # 1.4 m/s, stops for 3 s at t = 6..9, walks on
+            x = 1.4 * min(t, 6) + 1.4 * max(0, t - 9)
+            return [("person", x, 10)] if i % 5 else []  # missed in every 5th result
+        hits = self.run_check(walk, seconds=14)
+        self.assertTrue(hits and hits[0] < 2.5)              # counted within ~2 m of walking
+        self.assertFalse(any(8.0 < h < 9.0 for h in hits))   # standing still: the clip's 15 s after-roll covers it
+        self.assertTrue(any(9.0 < h < 10.0 for h in hits))   # walks on: counts again straight away
+
+    def test_parked_cars_do_not_count_but_a_driving_one_does(self):
+        parked = [("car", 5.0 * k, 0) for k in range(4)]
+        self.assertEqual(self.run_check(lambda t, i: parked, seconds=10), [])
+        hits = self.run_check(lambda t, i: parked + [("truck" if i % 4 == 0 else "car", 8 * t, 6)], seconds=4)
+        self.assertTrue(hits and hits[0] < 1.0)
+        self.assertEqual(self.run_check(lambda t, i: [("car", 8 * t, 6)], classes=["person"], seconds=4), [])
 
 
 class FloorPlanTests(TempData):
