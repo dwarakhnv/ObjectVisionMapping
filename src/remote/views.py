@@ -307,10 +307,10 @@ def api_recording_video(request, env, rec_id):
     p = recorder.recording_path(env, rec_id, "video")
     if p is None:
         raise Http404("No video")
-    size = p.stat().st_size
+    size, kind = p.stat().st_size, "video/mp4" if p.suffix == ".mp4" else "video/webm"
     m = re.match(r"bytes=(\d*)-(\d*)", request.headers.get("Range", ""))
     if not m:
-        resp = FileResponse(open(p, "rb"), content_type="video/webm")
+        resp = FileResponse(open(p, "rb"), content_type=kind)
         resp["Accept-Ranges"] = "bytes"
         return resp
     start = int(m.group(1)) if m.group(1) else max(0, size - int(m.group(2) or 0))
@@ -322,7 +322,7 @@ def api_recording_video(request, env, rec_id):
     with open(p, "rb") as fh:
         fh.seek(start)
         data = fh.read(end - start + 1)
-    resp = HttpResponse(data, status=206, content_type="video/webm")
+    resp = HttpResponse(data, status=206, content_type=kind)
     resp["Content-Range"] = "bytes %d-%d/%d" % (start, end, size)
     resp["Accept-Ranges"] = "bytes"
     return resp

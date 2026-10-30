@@ -19,6 +19,6 @@ urlpatterns = [
     # Saved recordings
     path("api/recordings/<str:env>", views.api_recordings),
     re_path(REC + r"$", views.api_recording),
-    re_path(REC + r"\.webm$", views.api_recording_video),
+    re_path(REC + r"\.(?:mp4|webm)$", views.api_recording_video),
     re_path(REC + r"\.jpg$", views.api_recording_thumb),
 ]

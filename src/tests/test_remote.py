@@ -178,9 +178,12 @@ class FakeCam:
     def __init__(self):
         self.n = 0
         self.key = "fake"
+        self.paused_until = 0.0
 
     def latest(self, after=0, timeout=1.0):
         time.sleep(0.05)
+        if time.time() < self.paused_until:  # a camera hiccup: the same frame again
+            return self.n, np.full((72, 128, 3), self.n % 255, np.uint8)
         self.n += 1
         f = np.full((72, 128, 3), self.n % 255, np.uint8)
         return self.n, f
@@ -194,7 +197,8 @@ class RecorderTests(TempData):
         self.consts = mock.patch.multiple(recorder, PRE_SECONDS=1.0, POST_SECONDS=1.0, SEGMENT_SECONDS=3.0, FPS=10,
                                           MIN_MOVE_M=1.0)
         self.consts.start()
-        self.cams = [mock.patch("simulation.camera.acquire", return_value=FakeCam()),
+        self.cam = FakeCam()
+        self.cams = [mock.patch("simulation.camera.acquire", return_value=self.cam),
                      mock.patch("simulation.camera.release")]
         for p in self.cams:
             p.start()
@@ -241,6 +245,24 @@ class RecorderTests(TempData):
         cap.release()
         self.assertAlmostEqual(n / 10.0, r["duration_s"], delta=0.3)
 
+    def test_camera_pause_is_noted_in_the_clip(self):
+        rec = self.rec_mod.Recorder("lot", "cam_a", "fake")
+        self.feed(rec, 1.2, moving=True)
+        self.cam.paused_until = time.time() + 1.5
+        self.feed(rec, 2.0, moving=True)
+        rec.close()
+        stalls = [s for r in self.rec_mod.list_recordings("lot") for s in r["stalls"]]
+        self.assertEqual(len(stalls), 1, stalls)
+        self.assertAlmostEqual(stalls[0][1], 1.5, delta=0.3)
+
+    def test_first_working_encoder_is_used(self):
+        good = ("good", ".webm", lambda p, s: self.rec_mod._CvWriter(p, s, cv2.CAP_ANY, "VP80"))
+
+        def broken(p, s):
+            raise RuntimeError("no such encoder here")
+        with mock.patch.object(self.rec_mod, "_codec", None),                 mock.patch.object(self.rec_mod, "_encoders", return_value=[("broken", ".mp4", broken), good]):
+            self.assertEqual(self.rec_mod.codec()[0], "good")
+
     def test_long_activity_is_split_into_segments(self):
         rec = self.rec_mod.Recorder("lot", "cam_a", "fake")
         self.feed(rec, 7.5, moving=True)
@@ -275,10 +297,13 @@ class RecorderTests(TempData):
         self.feed(rec, 1.2, moving=True)
         rec.close()
         self.env()
-        rid = self.client.get("/api/recordings/lot").json()["recordings"][0]["id"]
-        full = b"".join(self.client.get("/api/recordings/lot/%s.webm" % rid).streaming_content)
-        part = self.client.get("/api/recordings/lot/%s.webm" % rid, HTTP_RANGE="bytes=10-19")
+        r = self.client.get("/api/recordings/lot").json()["recordings"][0]
+        rid, url = r["id"], "/api/recordings/lot/" + r["file"]
+        self.assertEqual(r["file"], rid + self.rec_mod.codec()[1])
+        full = b"".join(self.client.get(url).streaming_content)
+        part = self.client.get(url, HTTP_RANGE="bytes=10-19")
         self.assertEqual(part.status_code, 206)
+        self.assertEqual(part["Content-Type"], "video/mp4" if r["file"].endswith(".mp4") else "video/webm")
         self.assertEqual(part.content, full[10:20])
         self.assertEqual(part["Content-Range"], "bytes 10-19/%d" % len(full))
         self.assertIn("timeline", self.client.get("/api/recordings/lot/" + rid).json())

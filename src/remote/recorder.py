@@ -18,10 +18,17 @@ street seen as people) never starts or extends a clip.
 Movement starts a clip with the buffered video, recording continues while it
 goes on, and stops POST_SECONDS after the last movement. Long activity is saved
 as consecutive SEGMENT_SECONDS clips. Video is encoded in its own thread, so
-detection never waits for it and clips never freeze.
+detection never waits for it.
+
+Video encoder: the first of these that works on this machine (checked once, see codec()):
+    1. the ffmpeg program (any OS, if installed: on PATH or OVM_FFMPEG)  H.264 MP4, in its own process
+    2. Windows Media Foundation (built into Windows; uses the GPU's video encoder if there is one)  H.264 MP4
+    3. OpenCV's own FFmpeg, where it was built with an H.264 encoder  H.264 MP4
+    4. VP8 WebM: always works, but takes ~200 ms per 720p frame, too slow to keep up at 10 FPS on most
+       CPUs: long clips then skip frames, and the busy CPU slows detection. Install ffmpeg to avoid it.
 
 Files, per environment, in data/recordings/<env>/:
-    <start>_<camera>.webm   the video (VP8 WebM: plays in any browser)
+    <start>_<camera>.mp4    the video (H.264; .webm with VP8: both play in any browser)
     <start>_<camera>.jpg    a thumbnail from the moment movement started
     <start>_<camera>.json   when, which camera, what was seen, and a timeline of detections
 """
@@ -31,6 +38,10 @@ import json
 import math
 import queue
 import re
+import shutil
+import subprocess
+import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -48,8 +59,10 @@ PRE_SECONDS = 15
 POST_SECONDS = 15
 SEGMENT_SECONDS = 60
 JPEG_QUALITY = 80
-TIMELINE_HZ = 2          # detection snapshots stored per second, for drawing boxes during playback
+TIMELINE_HZ = 10         # detection snapshots stored per second, for drawing boxes during playback
 MAX_BACKLOG_S = 60       # video waiting to be encoded; beyond this, frames are skipped (the last one repeats)
+STALL_S = 1.0            # the camera sent no new picture for this long: noted in the clip ("stalls")
+VIDEO_EXTS = (".mp4", ".webm")
 NAME_RE = re.compile(r"^\d{8}-\d{6}(-\d+)?_[a-z0-9_]+$")
 
 # Movement that counts
@@ -93,6 +106,88 @@ def region_test(region, map_key):
         area = prep(Polygon([(p["x"], p["y"]) for p in region]))
         at = lambda w: Point(w["x"], w["y"])  # noqa: E731
     return lambda obj: bool(obj.get(map_key)) and area.contains(at(obj[map_key]))
+
+
+# ---------------------------------------------------------------- video encoders
+class _CvWriter:
+    """An OpenCV VideoWriter (Media Foundation, OpenCV's FFmpeg or VP8). Gets decoded frames."""
+
+    def __init__(self, path, size, api, fourcc):
+        self.size = size
+        self.w = cv2.VideoWriter(str(path), api, cv2.VideoWriter_fourcc(*fourcc), FPS, size)
+        if not self.w.isOpened():
+            raise RuntimeError("Could not open a %s video writer" % fourcc)
+
+    def write(self, frame, jpg):
+        if (frame.shape[1], frame.shape[0]) != self.size:
+            frame = cv2.resize(frame, self.size)
+        self.w.write(frame)
+
+    def release(self):
+        self.w.release()
+
+
+class _FfmpegWriter:
+    """The ffmpeg program in its own process. Gets the JPEG frames as they are (no decoding here)."""
+
+    def __init__(self, path, size, exe):
+        self.p = subprocess.Popen(
+            [exe, "-loglevel", "error", "-y", "-f", "image2pipe", "-framerate", str(FPS), "-c:v", "mjpeg", "-i", "-",
+             "-vf", "scale=%d:%d" % size, "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+             "-movflags", "+faststart", str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def write(self, frame, jpg):
+        self.p.stdin.write(jpg)
+
+    def release(self):
+        self.p.stdin.close()
+        if self.p.wait(timeout=120) != 0:
+            raise RuntimeError("ffmpeg could not write the video")
+
+
+def _encoders():
+    """(name, file extension, open(path, (w, h)) -> writer), best first."""
+    out = []
+    exe = settings.OVM_FFMPEG or shutil.which("ffmpeg")
+    if exe:
+        out.append(("h264 (ffmpeg)", ".mp4", lambda p, s: _FfmpegWriter(p, s, exe)))
+    if sys.platform == "win32":
+        out.append(("h264 (Media Foundation)", ".mp4", lambda p, s: _CvWriter(p, s, cv2.CAP_MSMF, "H264")))
+    out.append(("h264 (OpenCV)", ".mp4", lambda p, s: _CvWriter(p, s, cv2.CAP_FFMPEG, "avc1")))
+    out.append(("vp8", ".webm", lambda p, s: _CvWriter(p, s, cv2.CAP_ANY, "VP80")))
+    return out
+
+
+_codec = None
+_codec_lock = threading.Lock()
+
+
+def codec():
+    """(name, extension, open) of the first encoder that works here: each is tried once on a short test clip."""
+    global _codec
+    with _codec_lock:
+        if _codec is None:
+            frame = np.zeros((720, 1280, 3), np.uint8)
+            jpg = cv2.imencode(".jpg", frame)[1].tobytes()
+            for name, ext, open_writer in _encoders():
+                folder = Path(tempfile.mkdtemp(prefix="ovm-codec-"))
+                try:
+                    w = open_writer(folder / ("test" + ext), (1280, 720))
+                    for _ in range(3):
+                        w.write(frame, jpg)
+                    w.release()
+                    if (folder / ("test" + ext)).stat().st_size > 0:
+                        _codec = (name, ext, open_writer)
+                        break
+                except Exception:
+                    pass
+                finally:
+                    shutil.rmtree(folder, ignore_errors=True)
+            print("Recordings: video encoder %s" % _codec[0], flush=True)
+            if _codec[0] == "vp8":
+                print("Recordings: VP8 is slow (long clips may skip frames). Install ffmpeg for H.264.", flush=True)
+        return _codec
 
 
 class ActivityCheck:
@@ -175,6 +270,7 @@ class Recorder:
         from simulation import camera as shared_cameras
 
         self.env, self.camera_id = env, camera_id
+        self.codec = codec()
         self._cams = shared_cameras
         self.cam = shared_cameras.acquire(camera_key)   # the reader detection already uses: no second connection
         self.activity = ActivityCheck(groups)
@@ -221,13 +317,17 @@ class Recorder:
 
     # ---------------------------------------------------------------- frames, at a steady FPS
     def _run(self):
-        last_id, next_t = 0, time.time()
+        last_id, next_t, last_new = 0, time.time(), time.time()
         frame = None
         while not self._stop.is_set():
             fid, f = self.cam.latest(last_id, timeout=1.0 / FPS)
-            if f is not None:
-                last_id, frame = fid, f
             now = time.time()
+            if f is not None and fid != last_id:
+                if frame is not None and now - last_new > STALL_S:  # the camera paused: the video shows a still picture
+                    with self._lock:
+                        if self.clip is not None:
+                            self.clip["stalls"].append([round(last_new - self.clip["start"], 1), round(now - last_new, 1)])
+                last_id, frame, last_new = fid, f, now
             if now < next_t:
                 self._stop.wait(next_t - now)
                 continue
@@ -261,12 +361,13 @@ class Recorder:
         start = frames[0][0] if frames else now
         stem = datetime.fromtimestamp(start).strftime("%Y%m%d-%H%M%S") + "_" + self.camera_id
         n = 1
-        while (folder / (stem + ".webm")).exists():
+        while any((folder / (stem + e)).exists() for e in VIDEO_EXTS):
             n += 1
             stem = datetime.fromtimestamp(start).strftime("%Y%m%d-%H%M%S") + "-%d_%s" % (n, self.camera_id)
-        (folder / (stem + ".webm")).touch()  # claim the name now: the encoder may get to it later
-        self.clip = {"stem": stem, "start": start, "writer": None, "written": 0, "size": None, "timeline": [],
-                     "last_timeline": 0.0, "seen": {}, "trigger": now, "continued": not pre_roll, "thumb": False}
+        (folder / (stem + self.codec[1])).touch()  # claim the name now: the encoder may get to it later
+        self.clip = {"stem": stem, "file": stem + self.codec[1], "start": start, "writer": None, "written": 0,
+                     "size": None, "timeline": [], "last_timeline": 0.0, "seen": {}, "stalls": [], "trigger": now,
+                     "continued": not pre_roll, "thumb": False}
         for t, jpg in frames:  # the 15 s before movement, encoded in the background
             self._jobs.put(("frame", self.clip, t, jpg))
         self.buffer.clear()
@@ -286,24 +387,21 @@ class Recorder:
                 if job[0] == "frame":
                     img = cv2.imdecode(np.frombuffer(job[3], dtype=np.uint8), cv2.IMREAD_COLOR)
                     if img is not None:
-                        self._write(job[1], img, job[2])
+                        self._write(job[1], img, job[3], job[2])
                 else:
                     self._save(job[1])
             except Exception:  # one bad frame or full disk must not stop recording for good
                 traceback.print_exc()
 
-    def _write(self, c, frame, t):
+    def _write(self, c, frame, jpg, t):
         if c["writer"] is None:
             h, w = frame.shape[:2]
             c["size"] = (w, h)
-            c["writer"] = cv2.VideoWriter(str(recordings_dir(self.env) / (c["stem"] + ".webm")),
-                                          cv2.VideoWriter_fourcc(*"VP80"), FPS, (w, h))
-        if (frame.shape[1], frame.shape[0]) != c["size"]:
-            frame = cv2.resize(frame, c["size"])
+            c["writer"] = self.codec[2](recordings_dir(self.env) / c["file"], c["size"])
         # Keep real time: repeat the frame if fewer than FPS frames arrived (slow camera, skipped frames).
         due = int((t - c["start"]) * FPS) + 1
         while c["written"] < due:
-            c["writer"].write(frame)
+            c["writer"].write(frame, jpg)
             c["written"] += 1
         if not c["thumb"] and t >= c["trigger"]:
             cv2.imwrite(str(recordings_dir(self.env) / (c["stem"] + ".jpg")), cv2.resize(frame, (480, int(480 * frame.shape[0] / frame.shape[1]))))
@@ -311,15 +409,18 @@ class Recorder:
 
     def _save(self, c):
         if c["writer"] is not None:
-            c["writer"].release()
+            try:
+                c["writer"].release()
+            except Exception:  # still save what is known about the clip
+                traceback.print_exc()
         if not c["written"]:
-            (recordings_dir(self.env) / (c["stem"] + ".webm")).unlink(missing_ok=True)
+            (recordings_dir(self.env) / c["file"]).unlink(missing_ok=True)
             return
-        meta = {"environment": self.env, "camera": self.camera_id, "file": c["stem"] + ".webm",
+        meta = {"environment": self.env, "camera": self.camera_id, "file": c["file"], "codec": self.codec[0],
                 "thumbnail": c["stem"] + ".jpg" if c["thumb"] else None,
                 "start": datetime.fromtimestamp(c["start"]).isoformat(timespec="seconds"),
                 "duration_s": round(c["written"] / FPS, 1), "fps": FPS, "size": c["size"],
-                "continued": c["continued"], "seen": {k: len(v) for k, v in c["seen"].items()},
+                "continued": c["continued"], "seen": {k: len(v) for k, v in c["seen"].items()}, "stalls": c["stalls"],
                 "timeline": c["timeline"]}
         with open(recordings_dir(self.env) / (c["stem"] + ".json"), "w", encoding="utf-8", newline="\n") as fh:
             json.dump(meta, fh)
@@ -350,8 +451,8 @@ def recording_path(env, rec_id, kind):
     """Path of a recording's video / thumbnail / metadata, or None (also guards against odd ids)."""
     if not NAME_RE.match(rec_id or "") or not re.match(r"^[a-z0-9_]+$", env or ""):
         return None
-    p = recordings_dir(env) / (rec_id + {"video": ".webm", "thumb": ".jpg", "meta": ".json"}[kind])
-    return p if p.exists() else None
+    exts = VIDEO_EXTS if kind == "video" else {"thumb": (".jpg",), "meta": (".json",)}[kind]
+    return next((p for p in (recordings_dir(env) / (rec_id + e) for e in exts) if p.exists()), None)
 
 
 def delete_recording(env, rec_id):

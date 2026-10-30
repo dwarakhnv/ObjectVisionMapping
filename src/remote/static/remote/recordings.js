@@ -63,11 +63,15 @@
     $("delete").classList.toggle("hidden", !has);
     $("download").classList.toggle("hidden", !has);
     if (!has) { video.removeAttribute("src"); $("rec-title").textContent = ""; $("rec-info").textContent = ""; return; }
-    video.src = base() + rec.id + ".webm";
-    $("download").href = base() + rec.id + ".webm";
+    video.src = base() + rec.file;
+    $("download").href = base() + rec.file;
     $("rec-title").textContent = new Date(rec.start).toLocaleString();
     $("rec-info").textContent = " · " + rec.camera.replace(/_/g, " ") + " · " + fmt(rec.duration_s, 0) + " s · " + seen(rec);
     S.meta = await api(base() + rec.id);
+    const stalls = S.meta.stalls || [];
+    if (stalls.length) {
+      $("rec-info").textContent += " · camera paused " + stalls.length + "× (longest " + fmt(Math.max(...stalls.map((s) => s[1])), 1) + " s)";
+    }
     drawBoxes();
   }
 
@@ -80,10 +84,19 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, r.width, r.height);
     const m = S.meta;
-    if (!m || !$("show-boxes").checked || !m.timeline || !m.timeline.length || !m.size) return;
     const t = video.currentTime;
+    // The camera sent no new picture here: the video shows a still frame.
+    if (m && (m.stalls || []).some(([at, len]) => t >= at && t <= at + len)) {
+      ctx.font = "600 13px -apple-system, Segoe UI, sans-serif";
+      const text = "Camera paused: no new picture";
+      ctx.fillStyle = "rgba(0,0,0,.65)";
+      ctx.fillRect(10, 10, ctx.measureText(text).width + 16, 24);
+      ctx.fillStyle = "#ffd60a";
+      ctx.fillText(text, 18, 27);
+    }
+    if (!m || !$("show-boxes").checked || !m.timeline || !m.timeline.length || !m.size) return;
     let snap = null;
-    for (const s of m.timeline) { if (s.t <= t + 0.25) snap = s; else break; }
+    for (const s of m.timeline) { if (s.t <= t + 0.05) snap = s; else break; }
     if (!snap || t - snap.t > 1.5) return;
     const [w, h] = m.size, k = Math.min(r.width / w, r.height / h), ox = (r.width - w * k) / 2, oy = (r.height - h * k) / 2;
     ctx.font = "600 12px -apple-system, Segoe UI, sans-serif";

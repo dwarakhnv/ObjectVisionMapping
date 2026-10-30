@@ -73,3 +73,5 @@ OVM_DEVICE = os.environ.get("OVM_DEVICE", "auto")
 OVM_IMGSZ = int(os.environ.get("OVM_IMGSZ", "960"))  # inference size: larger finds smaller, farther objects but is slower
 OVM_MAX_FPS = float(os.environ.get("OVM_MAX_FPS", "15"))
 OVM_FEED_IDLE_SECONDS = float(os.environ.get("OVM_FEED_IDLE_SECONDS", "30"))
+# The ffmpeg program for recordings (H.264). Empty: found on PATH; without it, Windows' own encoder or slow VP8.
+OVM_FFMPEG = os.environ.get("OVM_FFMPEG", "")
